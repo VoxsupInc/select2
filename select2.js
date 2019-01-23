@@ -3181,7 +3181,7 @@ the specific language governing permissions and limitations under the Apache Lic
         // @jdecuyper
         // Create hidden field to hold duplicated results
         processDuplicatedResults: function () {
-            const itemIDs = this.valWithDuplicate.join(this.opts.separator);
+            var itemIDs = this.valWithDuplicate.join(this.opts.separator);
 
             if(itemIDs != ""){
                 var hf = document.getElementById(this.opts.element.attr("id") + "-selection-no-filter");
