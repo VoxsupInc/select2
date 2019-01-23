@@ -3165,8 +3165,10 @@ the specific language governing permissions and limitations under the Apache Lic
 
                 var idToRemove = this.id(data);
                 for (var i = 0, j = this.valWithDuplicate.length; i < j; i = i + 1) {
-                    if(this.valWithDuplicate[i] == idToRemove)
-                        this.valWithDuplicate.splice(i, 1);
+                    if (this.valWithDuplicate[i] == idToRemove) {
+                      this.valWithDuplicate.splice(i, 1);
+                      break;
+                    }
                 }
 
                 this.processDuplicatedResults();
