@@ -1,7 +1,9 @@
 /*
-Copyright 2012 Igor Vaynberg
+Copyright 2012 Igor Vaynberg, modified by jdecuyper to support multiple copies of a value in a multiselector context
 
-Version: 3.5.2 Timestamp: Sat Nov  1 14:43:36 EDT 2014
+http://jdecuyper.github.io/javascripts/select2-3.5.2/select2.js
+
+Version: 3.5.2m Timestamp: Sat Nov  1 14:43:36 EDT 2014
 
 This software is licensed under the Apache License, Version 2.0 (the "Apache License") or the GNU
 General Public License version 2 (the "GPL License"). You may choose either license to govern your
@@ -2880,6 +2882,7 @@ the specific language governing permissions and limitations under the Apache Lic
             }
             if (this.select || this.opts.element.val() !== "") {
                 var self = this;
+
                 this.opts.initSelection.call(null, this.opts.element, function(data){
                     if (data !== undefined && data !== null) {
                         self.updateSelection(data);
@@ -2959,14 +2962,17 @@ the specific language governing permissions and limitations under the Apache Lic
         updateSelection: function (data) {
             var ids = [], filtered = [], self = this;
 
-            // filter out duplicates
-            $(data).each(function () {
-                if (indexOf(self.id(this), ids) < 0) {
-                    ids.push(self.id(this));
-                    filtered.push(this);
-                }
-            });
-            data = filtered;
+            // @jdecuyper
+            // if not specified otherwise, filter out duplicates
+            if (!self.opts.allowRepetitionForMultipleSelect) {
+                $(data).each(function () {
+                    if (indexOf(self.id(this), ids) < 0) {
+                        ids.push(self.id(this));
+                        filtered.push(this);
+                    }
+                });
+                data = filtered;
+            }
 
             this.selection.find(".select2-search-choice").remove();
             $(data).each(function () {
@@ -3094,6 +3100,21 @@ the specific language governing permissions and limitations under the Apache Lic
             choice.insertBefore(this.searchContainer);
 
             val.push(id);
+
+            // @jdecuyper
+            // After an item was selected, recreate the custom list containing the selected items.
+            // The list is stored inside a HTML hidden field and can be retrieved once the page is posted
+            // back to the server. The name of the hidden field is defined by another custom attribute called 'idForHiddenField'.
+            if(this.opts.allowRepetitionForMultipleSelect) {
+
+                // Add item to the list
+                if(this.valWithDuplicate == undefined)
+                    this.valWithDuplicate = [];
+                this.valWithDuplicate.push(id);
+
+                this.processDuplicatedResults();
+            }
+
             this.setVal(val);
         },
 
@@ -3136,7 +3157,51 @@ the specific language governing permissions and limitations under the Apache Lic
             this.opts.element.trigger({ type: "select2-removed", val: this.id(data), choice: data });
             this.triggerChange({ removed: data });
 
+            // @jdecuyper after an item was unselected, recreate the custom list containing the selected items.
+            // The list is stored inside a HTML hidden field and can be retrieved by C# code once the page is posted
+            // back to the server. The name of the hidden field is defined by another custom attribute called 'idForHiddenField'.
+            if(this.opts.allowRepetitionForMultipleSelect) {
+
+                // Remove item from the list
+                if(this.valWithDuplicate == undefined)
+                    this.valWithDuplicate = [];
+
+                var idToRemove = this.id(data);
+                for (var i = 0, j = this.valWithDuplicate.length; i < j; i = i + 1) {
+                    if(this.valWithDuplicate[i] == idToRemove)
+                        this.valWithDuplicate.splice(i, 1);
+                }
+
+                this.processDuplicatedResults();
+            }
+
             return true;
+        },
+
+        // multi
+        // @jdecuyper
+        // Create hidden field to hold duplicated results
+        processDuplicatedResults: function () {
+            var itemIDs = "";
+            for (var i = 0, j = this.valWithDuplicate.length; i < j; i = i + 1)
+                itemIDs += this.valWithDuplicate[i] + this.opts.separator;
+
+            if(itemIDs != ""){
+                itemIDs = itemIDs.slice(0,itemIDs.length - 1);
+
+                var hf = document.getElementById(this.opts.element.attr("id") + "-selection-no-filter");
+                if(hf == undefined) {
+                    var input = document.createElement("input");
+                    input.setAttribute("type", "text");
+                    input.setAttribute("name", this.opts.element.attr("id") + "-selection-no-filter");
+                    input.setAttribute("id", this.opts.element.attr("id") + "-selection-no-filter");
+                    input.setAttribute("value", itemIDs);
+                    document.getElementById(this.opts.element.attr("id")).appendChild(input);
+                }
+                else {
+                    hf.setAttribute("value", itemIDs);
+                }
+            }
         },
 
         // multi
@@ -3148,7 +3213,9 @@ the specific language governing permissions and limitations under the Apache Lic
 
             choices.each2(function (i, choice) {
                 var id = self.id(choice.data("select2-data"));
-                if (indexOf(id, val) >= 0) {
+
+                // @jdecuyper
+                if (!self.opts.allowRepetitionForMultipleSelect && indexOf(id, val) >= 0) {
                     choice.addClass("select2-selected");
                     // mark all children of the selected parent as selected
                     choice.find(".select2-result-selectable").addClass("select2-selected");
@@ -3169,7 +3236,7 @@ the specific language governing permissions and limitations under the Apache Lic
 
             //If all results are chosen render formatNoMatches
             if(!this.opts.createSearchChoice && !choices.filter('.select2-result:not(.select2-selected)').length > 0){
-                if((!data || data && !data.more) && this.results.find(".select2-no-results").length === 0) {
+                if(!data || data && !data.more && this.results.find(".select2-no-results").length === 0) {
                     if (checkFormatter(self.opts.formatNoMatches, "formatNoMatches")) {
                         this.results.append("<li class='select2-no-results'>" + evaluate(self.opts.formatNoMatches, self.opts.element, self.search.val()) + "</li>");
                     }
@@ -3376,6 +3443,7 @@ the specific language governing permissions and limitations under the Apache Lic
             methodsMap = { search: "externalSearch" };
 
         this.each(function () {
+
             if (args.length === 0 || typeof(args[0]) === "object") {
                 opts = args.length === 0 ? {} : $.extend({}, args[0]);
                 opts.element = $(this);
@@ -3385,6 +3453,11 @@ the specific language governing permissions and limitations under the Apache Lic
                 } else {
                     multiple = opts.multiple || false;
                     if ("tags" in opts) {opts.multiple = multiple = true;}
+                }
+
+                // @jdecuyper
+                if (multiple) {
+                    opts.allowRepetitionForMultipleSelect = opts.allowRepetitionForMultipleSelect == undefined ? false : opts.allowRepetitionForMultipleSelect;
                 }
 
                 select2 = multiple ? new window.Select2["class"].multi() : new window.Select2["class"].single();
